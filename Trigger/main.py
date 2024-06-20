@@ -22,17 +22,19 @@ def detect_new_image(cloud_event):
     repo_path = '/tmp/repo'
 
     api = decoded_message["digest"].split('/')
-    if api[2] == "api-client":
-        clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
-        repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
+    match api[2]:
+        case "api-client":
+            clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
+            repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
 
-        return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message, repo_url, api[2])
+            return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message
+                                    , repo_url, api[2])
+        case "api-commande":
+            clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
+            repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
 
-    if api[2] == "api-commande":
-        clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
-        repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
-
-        return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message, repo_url, api[2])
+            return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message
+                                    , repo_url, api[2])
     return f"Rien Push"
 
 
