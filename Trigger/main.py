@@ -5,6 +5,7 @@ import git
 import os
 import re
 import shutil
+from ruamel.yaml import YAML
 
 @functions_framework.http
 def detect_new_image(cloud_event):
@@ -41,7 +42,7 @@ def detect_new_image(cloud_event):
         digest = decoded_message['digest']
         sha = digest.split('@')[-1]
         sha = sha.split(':')[-1]
-        find_and_replace_gcloud_command(file_path,sha)
+        update_version_in_yaml(file_path,sha)
 
         repo.git.add(all=True)
 
@@ -53,19 +54,16 @@ def detect_new_image(cloud_event):
     return f"Version push"
 
 
-def find_and_replace_gcloud_command(file_path, new_sha256):
-    gcloud_command_pattern = re.compile(
-        r'(gcloud run deploy api-client-develop --image europe-west9-docker.pkg.dev/\$GOOGLE_PROJECT/api-client/image-api-client@sha256:)[0-9a-f]{64}( --set-env-vars DATABASE_HOST=\$DATABASE_HOST --set-env-vars DATABASE_USER=\$DATABASE_USER --set-env-vars DATABASE_PASSWORD=\$DATABASE_PASSWORD --set-env-vars INSTANCE_UNIX_SOCKET=\$INSTANCE_UNIX_SOCKET --add-cloudsql-instances \$CONNECTION_NAME  --region  europe-west9 --platform managed --allow-unauthenticated)'
-    )
+def update_version_in_yaml(file_path, new_sha256):
+    yaml = YAML()
 
     with open(file_path, 'r') as file:
-        lines = file.readlines()
+        data = yaml.load(file)
+
+    # Mise à jour de la valeur de VERSION
+    data['jobs']['deploy']['steps'][2]['env']['VERSION'] = new_sha256
 
     with open(file_path, 'w') as file:
-        for line in lines:
-            match = gcloud_command_pattern.search(line)
-            if match:
-                new_line = gcloud_command_pattern.sub(r'\1' + new_sha256 + r'\2', line)
-                file.write(new_line)
-            else:
-                file.write(line)
+        yaml.dump(data, file)
+
+    print(f"La valeur de VERSION a été mise à jour à {new_sha256}")
