@@ -3,7 +3,6 @@ import json
 import functions_framework
 import git
 import os
-import re
 import shutil
 from ruamel.yaml import YAML
 
@@ -16,42 +15,25 @@ def detect_new_image(cloud_event):
     decoded_jwt = base64.urlsafe_b64decode(encoded_jwt + '=' * (4 - len(encoded_jwt) % 4)).decode('utf-8')
     decoded_message = json.loads(decoded_jwt)
 
-    Github_token = os.getenv('Github_token')
-    Github_user = os.getenv('Github_user')
-    Github_user_email = os.getenv('Github_user_email')
+    github_token = os.getenv('Github_token')
+    github_user = os.getenv('Github_user')
+    github_user_email = os.getenv('Github_user_email')
+    source_branch = 'develop'
+    repo_path = '/tmp/repo'
 
     api = decoded_message["digest"].split('/')
     if api[2] == "api-client":
-        CLONE_URL = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
-        SOURCE_BRANCH = 'develop'
-        REPO_PATH = '/tmp/repo'
-        repo_url = f'https://{Github_user}:{Github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
-        file_path = os.path.join(REPO_PATH, '.github/workflows/deploy.yml')
+        clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
+        repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Client.git'
 
-        if os.path.exists(REPO_PATH):
-            shutil.rmtree(REPO_PATH)
+        return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message, repo_url, api[2])
 
-        repo = git.Repo.clone_from(CLONE_URL, REPO_PATH, branch=SOURCE_BRANCH)
-        with repo.config_writer() as git_config:
-            git_config.set_value("user", "name", Github_user)
-            git_config.set_value("user", "email", Github_user_email)
+    if api[2] == "api-commande":
+        clone_url = 'https://github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
+        repo_url = f'https://{github_user}:{github_token}@github.com/MSPR-Dev-I1/RepoVersion-API-Commande.git'
 
-
-        repo.git.checkout(SOURCE_BRANCH)
-
-        digest = decoded_message['digest']
-        sha = digest.split('@')[-1]
-        sha = sha.split(':')[-1]
-        update_version_in_yaml(file_path,sha)
-
-        repo.git.add(all=True)
-
-        repo.index.commit('Modification d\'un fichier existant')
-
-        repo.remote().set_url(repo_url)
-        repo.git.push('origin', SOURCE_BRANCH)
-
-    return f"Version push"
+        return push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message, repo_url, api[2])
+    return f"Rien Push"
 
 
 def update_version_in_yaml(file_path, new_sha256):
@@ -60,10 +42,52 @@ def update_version_in_yaml(file_path, new_sha256):
     with open(file_path, 'r') as file:
         data = yaml.load(file)
 
-    # Mise à jour de la valeur de VERSION
     data['jobs']['deploy']['steps'][2]['env']['VERSION'] = new_sha256
 
     with open(file_path, 'w') as file:
         yaml.dump(data, file)
 
     print(f"La valeur de VERSION a été mise à jour à {new_sha256}")
+
+
+def delete_repo(repo_path):
+    if os.path.exists(repo_path):
+        shutil.rmtree(repo_path)
+
+
+def clone_repo(clone_url, repo_path, source_branch, github_user,github_user_email):
+    repo = git.Repo.clone_from(clone_url, repo_path, branch=source_branch)
+    with repo.config_writer() as git_config:
+        git_config.set_value("user", "name", github_user)
+        git_config.set_value("user", "email", github_user_email)
+
+    repo.git.checkout(source_branch)
+    return repo
+
+
+def get_new_sha(digest):
+    sha = digest.split('@')[-1]
+    sha = sha.split(':')[-1]
+    return sha
+
+
+def push_commit(repo, sha, repo_url, source_branch):
+    repo.git.add(all=True)
+
+    repo.index.commit(f'feat: nouvelle version sha:{sha}')
+
+    repo.remote().set_url(repo_url)
+    repo.git.push('origin', source_branch)
+
+
+def push_new_version(repo_path, clone_url, source_branch, github_user, github_user_email, decoded_message, repo_url, name_api):
+    file_path = os.path.join(repo_path, '.github/workflows/deploy.yml')
+
+    delete_repo(repo_path)
+    repo = clone_repo(clone_url, repo_path, source_branch, github_user, github_user_email)
+
+    sha = get_new_sha(decoded_message['digest'])
+    update_version_in_yaml(file_path, sha)
+
+    push_commit(repo, sha, repo_url, source_branch)
+    return f"Version push {name_api} : {sha}"
